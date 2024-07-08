@@ -29,6 +29,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - name: Install ALSA library
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
       - name: Cache Cargo registry and build
         uses: actions/cache@v3
         with:
