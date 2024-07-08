@@ -1,0 +1,1 @@
+mineswepper is a typo
