@@ -3,14 +3,6 @@
 version = 3
 
 [[package]]
-name = "MineSwepper"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "bevy-inspector-egui",
-]
-
-[[package]]
 name = "ab_glyph"
 version = "0.2.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2587,6 +2579,16 @@ dependencies = [
  "log",
  "objc",
  "paste",
+]
+
+[[package]]
+name = "mineswepper"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy-inspector-egui",
+ "lazy_static",
+ "once_cell",
 ]
 
 [[package]]

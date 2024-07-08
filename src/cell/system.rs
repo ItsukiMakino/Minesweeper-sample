@@ -1,56 +1,54 @@
-use bevy::{color::palettes::css::LIME, ecs::query, prelude::*};
-use super::component::CellButton;
+use super::component::*;
+use bevy::prelude::*;
 
 
-pub fn setup(
-    mut commands:Commands,)
-{
+pub fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
-    commands.spawn(create_screen_node())
-        .with_children(|parent|{
-            parent.spawn(create_node_parent())
-            .with_children(|parent|{
-                for index in 0..256{
-                    parent.spawn((create_button(),
-                    CellButton{
-                        index :index,
-                        ..Default::default()}
+    commands
+        .spawn(create_screen_node())
+        .with_children(|parent| {
+            parent.spawn((create_node_parent(),Grid{}))
+            .with_children(|parent| {
+                for index in 0..256 {
+                    parent.spawn((
+                        create_button(),
+                        CellButton {
+                            index: index,
+                            ..Default::default()
+                        },
                     ));
                 }
-           });       
+            });
         });
-        
 }
-fn create_screen_node() -> NodeBundle
-{
-    NodeBundle{
-        style:Style{
-            width:Val::Percent(100.0),
-            height:Val::Percent(100.0),
+fn create_screen_node() -> NodeBundle {
+    NodeBundle {
+        style: Style {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
             flex_direction: FlexDirection::Column,
             display: Display::Flex,
             align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center, 
+            justify_content: JustifyContent::Center,
             ..Default::default()
         },
-        background_color: BackgroundColor(Color::srgb(255.0,0.0,0.0,)),
-        ..Default::default()    
+        background_color: BackgroundColor(Color::srgb(255.0, 0.0, 0.0)),
+        ..Default::default()
     }
 }
-fn create_node_parent() ->NodeBundle
-{
-    NodeBundle{
-        style:Style{
-            width:Val::Px(640.0),
-            height:Val::Px(640.0),
+fn create_node_parent() -> NodeBundle {
+    NodeBundle {
+        style: Style {
+            width: Val::Px(640.0),
+            height: Val::Px(640.0),
             display: Display::Grid,
             grid_template_columns: RepeatedGridTrack::flex(16, 1.0),
             grid_template_rows: RepeatedGridTrack::flex(16, 1.0),
             aspect_ratio: Some(1.0),
             row_gap: Val::Px(4.0),
             column_gap: Val::Px(4.0),
-            padding:UiRect::all(Val::Px(4.0)),
-            // justify_content: JustifyContent::FlexStart, 
+            padding: UiRect::all(Val::Px(4.0)),
+            // justify_content: JustifyContent::FlexStart,
             ..Default::default()
         },
         background_color: Color::srgb(0.2, 0.4, 1.).into(),
@@ -73,10 +71,9 @@ fn create_node_parent() ->NodeBundle
 //         ..Default::default()
 //     }
 // }
-fn create_button() ->ButtonBundle
-{
-    ButtonBundle{
-        style:Style{
+fn create_button() -> ButtonBundle {
+    ButtonBundle {
+        style: Style {
             display: Display::Grid,
             ..Default::default()
         },
@@ -86,24 +83,47 @@ fn create_button() ->ButtonBundle
 }
 
 pub fn click_cell(
-    mut query:Query<(&Interaction,&mut BackgroundColor,&mut CellButton),(Changed<Interaction>,With<CellButton>)>
-)
-{
-    for (interaction, mut color,mut button) in &mut query{
-
+    mut query: Query<
+        (&Interaction, &mut BackgroundColor, &mut CellButton),
+        (Changed<Interaction>, With<CellButton>),
+    >,
+) {
+    for (interaction, mut color, mut button) in &mut query {
         match *interaction {
-            Interaction::Pressed=>{
+            Interaction::Pressed => {
                 if !button.revailed {
                     button.revailed = true;
-                    println!("revailed: {}",button.index);
+                    println!("revailed: {}", button.index);
                 }
                 *color = Color::srgb(0.1, 0.0, 0.0).into();
             }
-            Interaction::Hovered =>{}
-            Interaction::None =>{ 
+            Interaction::Hovered => {}
+            Interaction::None => {
                 *color = BackgroundColor(Color::WHITE);
             }
         }
     }
-    
+}
+pub fn reset(mut commands: Commands,
+    cell_query: Query<Entity, With<CellButton>>,
+    parent: Query<Entity,With<Grid>>,
+)
+{
+    for entity in cell_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+    for p in parent.iter(){
+
+        for index in 0..256 {
+            let id = commands.spawn((
+                create_button(),
+                CellButton {
+                    index: index,
+                    ..Default::default()
+                },
+            )).id();
+            commands.entity(p).push_children(&[id]);
+        }
+        println!("reset and this is call once");
+    }
 }
