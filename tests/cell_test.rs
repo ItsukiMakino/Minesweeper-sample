@@ -1,7 +1,6 @@
 use bevy::{input::InputPlugin, prelude::*, };
 use mineswepper::cell::{self, component::CellButton};
-use once_cell::sync::Lazy;
-use std::sync::Once;
+
 
 #[test]
 fn grid_spawn_test() {

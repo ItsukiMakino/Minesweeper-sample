@@ -1,11 +1,20 @@
 [package]
-name = "MineSwepper"
+name = "mineswepper"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 bevy = "0.14.0"
 bevy-inspector-egui = "0.25.0"
+lazy_static = "1.4.0"
+once_cell = "1.10.0"
+
+[lib]
+name = "mineswepper"
+path = "src/lib.rs"
+
+[dev-dependencies]
+once_cell = "1.10.0"
 
 [build]
 rustflags = ["-Awarnings"]
