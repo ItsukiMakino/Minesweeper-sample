@@ -13,7 +13,7 @@ pub fn setup(mut commands: Commands) {
                     parent.spawn((
                         create_button(),
                         CellButton {
-                            index: index,
+                            index,
                             ..Default::default()
                         },
                     ));
@@ -81,7 +81,7 @@ fn create_button() -> ButtonBundle {
         ..Default::default()
     }
 }
-
+#[allow(clippy::type_complexity)]
 pub fn click_cell(
     mut query: Query<
         (&Interaction, &mut BackgroundColor, &mut CellButton),
@@ -118,7 +118,7 @@ pub fn reset(mut commands: Commands,
             let id = commands.spawn((
                 create_button(),
                 CellButton {
-                    index: index,
+                    index,
                     ..Default::default()
                 },
             )).id();
