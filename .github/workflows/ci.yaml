@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: ["main"]
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   formatting:
     name: Cargo fmt
@@ -19,8 +16,10 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - name: Rustfmt Check
-        run: cargo fmt -- --check
+      - name: Format Code
+        run: cargo fmt
+      - name: Check Format
+        run: cargo fmt --check
 
   test:
     name: Cargo test
@@ -30,5 +29,15 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       - name: Test
         run: cargo test --all-features
