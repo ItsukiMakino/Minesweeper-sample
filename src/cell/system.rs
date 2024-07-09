@@ -1,6 +1,7 @@
 use super::component::*;
 use bevy::prelude::*;
-
+use rand::seq::SliceRandom;
+use rand::Rng;
 
 pub fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
@@ -9,11 +10,16 @@ pub fn setup(mut commands: Commands) {
         .with_children(|parent| {
             parent.spawn((create_node_parent(),Grid{}))
             .with_children(|parent| {
+                let mut rng = rand::thread_rng();
+                let mut indices: Vec<u16> = (0..256).collect();
+                indices.shuffle(&mut rng);
+                let random_indices = &indices[..40];
                 for index in 0..256 {
                     parent.spawn((
                         create_button(),
                         CellButton {
                             index,
+                            hasbomb:random_indices.contains(&index),
                             ..Default::default()
                         },
                     ));
@@ -81,6 +87,12 @@ fn create_button() -> ButtonBundle {
         ..Default::default()
     }
 }
+fn create_cellbutton(index:u16) -> CellButton{
+    CellButton{
+        index,
+        ..Default::default()
+    }
+}
 #[allow(clippy::type_complexity)]
 pub fn click_cell(
     mut query: Query<
@@ -92,8 +104,9 @@ pub fn click_cell(
         match *interaction {
             Interaction::Pressed => {
                 if !button.revailed {
-                    button.revailed = true;
-                    println!("revailed: {}", button.index);
+                    check_cell(&mut button);
+                }
+                else{
                 }
                 *color = Color::srgb(0.1, 0.0, 0.0).into();
             }
@@ -124,6 +137,42 @@ pub fn reset(mut commands: Commands,
             )).id();
             commands.entity(p).push_children(&[id]);
         }
-        println!("reset and this is call once");
+        
     }
+}
+fn check_cell(button :&mut Mut<CellButton>,)
+{
+    button.revailed = true;
+    if button.hasbomb
+    {
+        println!("gameover");
+        return;
+    }
+    let neighbor = get_neighboring_indices(button.index);
+
+    println!("{}, {}, {:?}",button.revailed ,button.index,neighbor);
+}
+fn get_neighboring_indices(index:u16) ->Vec<u16>
+{
+    let grid_size = 256;
+    let row_size = (grid_size as f64).sqrt() as u16;
+    let row = index / row_size;
+    let col = index % row_size;
+
+    let mut neighbors:Vec<u16> = Vec::new();
+
+    for y in -1..=1 {
+        for x in -1..=1 {
+            if y == 0 && x == 0 {
+                continue;
+            }
+            let new_row = row as isize + y;
+            let new_col = col as isize + x;
+
+            if new_row >= 0 && new_row < row_size as isize && new_col >= 0 && new_col < row_size as isize {
+                neighbors.push((new_row as u16 * row_size) + new_col as u16);
+            }
+        }
+    }
+    neighbors
 }
