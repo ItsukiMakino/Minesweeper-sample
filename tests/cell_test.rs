@@ -1,5 +1,5 @@
 use bevy::{input::InputPlugin, prelude::*, };
-use mineswepper::cell::{self, component::CellButton};
+use mineswepper::cell::{self, {component::*,style::*}};
 
 
 #[test]
@@ -9,20 +9,43 @@ fn grid_spawn_test() {
     app.add_plugins(cell::MyPlugin);
     app.add_plugins(InputPlugin);
     app.update();
+
     assert_eq!(
         app.world_mut()
             .query::<&CellButton>()
             .iter(app.world())
             .len(),
-        256
+        GRID_SIZE as usize
     );
 }
 #[test]
-fn test_example() {
-    assert_ne!(1 + 1, 1);
+fn reset_test() {
+     let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.add_plugins(cell::MyPlugin);
+    // app.add_plugins(InputPlugin);
+    app.insert_resource(VisibleState{state:true});
+    let mut input = ButtonInput::<KeyCode>::default();
+    input.press(KeyCode::KeyM);
+    app.insert_resource(input);
+    app.update();
+
+
+    assert_eq!(app.world().resource::<VisibleState>().state,false);
+
+
+    let mut binding = app.world_mut().query::<&CellButton>();
+    let cells = binding.iter(app.world());
+    let mut count = 0;
+    for cell in cells{
+        if cell.hasbomb{
+            count +=1;
+        }
+    }
+    assert_eq!(count,BOMB_COUNT);
 }
 #[test]
-fn get_neighboring_indices()
+fn get_neighboring_indices_test()
 {
     let grid_size = 256;
     let index = 0;

@@ -1,7 +1,8 @@
 use super::component::*;
+use bevy::ecs::{event, query};
 use bevy::prelude::*;
 use rand::seq::SliceRandom;
-use rand::Rng;
+use super::style::*;
 
 pub fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
@@ -11,20 +12,19 @@ pub fn setup(mut commands: Commands) {
             parent.spawn((create_node_parent(),Grid{}))
             .with_children(|parent| {
                 let mut rng = rand::thread_rng();
-                let mut indices: Vec<u16> = (0..256).collect();
+                let mut indices: Vec<u16> = (0..GRID_SIZE).collect();
                 indices.shuffle(&mut rng);
-                let random_indices = &indices[..40];
-                for index in 0..256 {
+                let random_indices = &indices[..BOMB_COUNT];
+                for index in 0..GRID_SIZE {
                     parent.spawn((
                         create_button(),
-                        CellButton {
-                            index,
-                            hasbomb:random_indices.contains(&index),
-                            ..Default::default()
-                        },
-                    ));
+                        create_cellbutton(index,random_indices),
+                    )).with_children(|parent|{
+                        parent.spawn(create_text());
+                    }); 
                 }
             });
+               
         });
 }
 fn create_screen_node() -> NodeBundle {
@@ -61,97 +61,217 @@ fn create_node_parent() -> NodeBundle {
         ..Default::default()
     }
 }
-// fn create_row() -> NodeBundle
-// {
-//     NodeBundle{
-//         style:Style{
-//             width:Val::Px(640.0),
-//             height:Val::Percent(100.0/16.0),
-//             flex_direction: FlexDirection::Row,
-//             justify_content: JustifyContent::SpaceEvenly,
-
-//             margin: UiRect::all(Val::Px(2.0)),
-//             ..Default::default()
-//         },
-//         background_color: Color::srgb(0.4, 0.4, 1.).into(),
-//         ..Default::default()
-//     }
-// }
 fn create_button() -> ButtonBundle {
     ButtonBundle {
         style: Style {
             display: Display::Grid,
+            // margin: UiRect::all(Val::Auto), 
+            justify_content:JustifyContent::Center,
+            align_items:AlignItems::Center,
             ..Default::default()
         },
         background_color: BackgroundColor(Color::WHITE),
         ..Default::default()
     }
 }
-fn create_cellbutton(index:u16) -> CellButton{
+fn create_cellbutton(index:u16 , random_indices:&[u16]) -> CellButton{
     CellButton{
         index,
+        hasbomb:random_indices.contains(&index),
         ..Default::default()
     }
+}
+fn create_text() -> TextBundle{
+    TextBundle{
+        visibility:Visibility::Hidden,
+        text:Text::from_section(
+           "",
+       TextStyle {
+             font_size: 640.0/16.0*0.8,
+             color: Color::BLACK,
+             ..default()
+         })
+        .with_justify(JustifyText::Center),
+        style:Style{
+            ..Default::default()
+        },
+        ..default()
+    }
+    
+    
 }
 #[allow(clippy::type_complexity)]
 pub fn click_cell(
     mut query: Query<
-        (&Interaction, &mut BackgroundColor, &mut CellButton),
-        (Changed<Interaction>, With<CellButton>),
+        (&Interaction,Mut<CellButton>,),
+        (Changed<Interaction>, With<CellButton>,),
     >,
+    // mut text_query: Query<
+    //     (Mut<Text>, Mut<Visibility>),
+    //     With<Text>>,
+    mut commands: Commands,
 ) {
-    for (interaction, mut color, mut button) in &mut query {
+    for (interaction,mut button,) in &mut query {
         match *interaction {
             Interaction::Pressed => {
+                if button.hasbomb{
+                    commands.trigger(Gameover);
+                    return;
+                }
+                
+                
                 if !button.revailed {
-                    check_cell(&mut button);
+                    button.revailed = true;
+                    commands.trigger(OnClickCell{
+                        index:button.index,
+                    });
+                    commands.trigger(OnZeroRecursive{
+                        index:button.index,
+                    });
+                    return;  
                 }
-                else{
-                }
-                *color = Color::srgb(0.1, 0.0, 0.0).into();
+                
             }
             Interaction::Hovered => {}
-            Interaction::None => {
-                *color = BackgroundColor(Color::WHITE);
-            }
+            Interaction::None => {}
         }
     }
+}
+
+pub fn gameover(trigger: Trigger<Gameover>)
+{
+    println!("{:?} event is triggered!",trigger.event());
 }
 pub fn reset(mut commands: Commands,
     cell_query: Query<Entity, With<CellButton>>,
     parent: Query<Entity,With<Grid>>,
+    mut visible: ResMut<VisibleState>
 )
 {
+    visible.state = false;
+    
     for entity in cell_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
     for p in parent.iter(){
+        let mut rng = rand::thread_rng();
+        let mut indices: Vec<u16> = (0..GRID_SIZE).collect();
+        indices.shuffle(&mut rng);
+        let random_indices = &indices[..BOMB_COUNT];
 
-        for index in 0..256 {
+        for index in 0..GRID_SIZE {
             let id = commands.spawn((
                 create_button(),
-                CellButton {
-                    index,
-                    ..Default::default()
-                },
-            )).id();
+                create_cellbutton(index,random_indices),
+            )).with_children(|parent|{
+                parent.spawn(create_text());
+            }).id();
             commands.entity(p).push_children(&[id]);
+        }
+    }
+}
+pub fn on_click_cell(
+    trigger: Trigger<OnClickCell>,
+    mut neighbor_query: Query<(Mut<CellButton>,&Children),>,
+    mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
+){
+    let mut count = 0;
+    let mut bomb_count =0;
+    let neighbors = get_neighboring_indices(trigger.event().index);
+      
+    
+    for &neighbor_index in &neighbors {
+        for (button,_) in &mut neighbor_query{
+            if button.index == neighbor_index{
+                if button.hasbomb
+                {
+                    bomb_count +=1;
+                }
+            }
+        }
+        if bomb_count != 0{
+            for (button,children) in &mut neighbor_query{
+                if button.index == trigger.event().index{
+                    for child in children.iter() {
+                        if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
+                            text.sections[0].value = bomb_count.to_string();
+                            *vis = Visibility::Visible;
+                        }
+                    }
+                }
+                if button.revailed{
+                    count+=1;
+                }
+            }
+        }
+        
+    }
+   
+    
+    if count == 256 - 45
+    {
+        println!("Clear");
+    }
+}
+
+pub fn on_zero_recursive(
+    trigger: Trigger<OnZeroRecursive>,
+    mut commands: Commands,
+    mut neighbor_query: Query<(Mut<CellButton>,&Children)>,
+    mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
+    mut zero_indices: Local<Vec<u16>>,
+) {
+    zero_indices.clear();
+    let mut neighbors: Vec<u16> = get_neighboring_indices(trigger.event().index);
+    println!("{:?}",neighbors);
+    while let Some(index) = neighbors.pop() {
+        let mut count = 0;
+        // 周囲の爆弾の数をカウント
+        for &neighbor_index in &neighbors {
+            if let Some(button) = neighbor_query.iter_mut().find_map(|(button,_)| {
+                if button.index == neighbor_index {
+                    Some(button)
+                } else {
+                    None
+                }
+            }) {
+                if button.hasbomb {
+                    count += 1;
+                }
+            }
+        }
+
+        // 現在のセルのテキストと可視性を更新
+        if let Some((mut button, children)) = neighbor_query.iter_mut().find_map(|(button, children)| {
+            if button.index == index && !button.revailed && !button.hasbomb  {
+                Some((button,children))
+            } else {
+                None
+            }
+        }) {
+            button.revailed = true;
+            commands.trigger(OnClickCell{
+                index:button.index,
+            });
+            // カウントが0以外の場合、テキストを更新
+            if count != 0 {
+                for child in children.iter() {
+                    if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
+                        text.sections[0].value = count.to_string();
+                        *vis = Visibility::Visible;
+                    }
+                }
+            }else {
+                if !neighbors.contains(&button.index) && count == 0 {
+                    neighbors.push(button.index);
+                }       
+            } 
         }
         
     }
 }
-fn check_cell(button :&mut Mut<CellButton>,)
-{
-    button.revailed = true;
-    if button.hasbomb
-    {
-        println!("gameover");
-        return;
-    }
-    let neighbor = get_neighboring_indices(button.index);
 
-    println!("{}, {}, {:?}",button.revailed ,button.index,neighbor);
-}
+
 fn get_neighboring_indices(index:u16) ->Vec<u16>
 {
     let grid_size = 256;
@@ -175,4 +295,25 @@ fn get_neighboring_indices(index:u16) ->Vec<u16>
         }
     }
     neighbors
+}
+pub fn toggle_visible(
+    mut query: Query<
+            (Mut<CellButton>,Mut<BackgroundColor>),
+        >,
+    mut visible: ResMut<VisibleState>,
+)
+{
+    for (button, mut color) in query.iter_mut() {
+        if !visible.state {
+            *color = if button.hasbomb {
+                Color::srgb(0.2, 0.2, 0.4).into()
+            } else {
+                Color::srgb(1.0, 1.0, 1.0).into()
+            };
+        } else {
+            *color = Color::srgb(1.0, 1.0, 1.0).into();
+        }
+    }
+    visible.state = !visible.state;
+    
 }
