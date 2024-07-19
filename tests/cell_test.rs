@@ -47,7 +47,7 @@ fn reset_test() {
 #[test]
 fn get_neighboring_indices_test()
 {
-    let grid_size = 256;
+    let grid_size = GRID_SIZE;
     let index = 0;
     let row_size = (grid_size as f64).sqrt() as u8;
     let row = index / row_size;

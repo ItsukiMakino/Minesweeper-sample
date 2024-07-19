@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::winit::WinitSettings;
 use bevy_inspector_egui::prelude::*;
-use mineswepper::cell;
+use mineswepper::{cell,};
 
 // `InspectorOptions` are completely optional
 #[derive(Reflect, Resource, Default, InspectorOptions)]
