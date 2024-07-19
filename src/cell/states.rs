@@ -4,7 +4,10 @@ use bevy_asset_loader::asset_collection::AssetCollection;
 pub enum AppState{
     #[default]
     Loading,
-    Loaded
+    Loaded,
+    InGame,
+    GameClear,
+    Gameover,
 }
 #[derive(AssetCollection, Resource,Clone)]
 pub struct FontAssets {

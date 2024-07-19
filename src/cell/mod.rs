@@ -18,22 +18,20 @@ impl Plugin for MyPlugin {
         app.add_systems(OnEnter(states::AppState::Loaded), system::setup);
         
         app.add_systems(Update, system::mark_cell
-            .run_if(in_state(states::AppState::Loaded))
+            .run_if(in_state(states::AppState::InGame))
             .run_if(input_just_pressed(MouseButton::Right)));
 
-        app.add_systems(Update, system::click_cell
-            .run_if(in_state(states::AppState::Loaded)));
-
+        app.add_systems(Update, system::click_cell.run_if(in_state(states::AppState::InGame)));
 
         app.add_systems(Update, system::toggle_visible
-            .run_if(in_state(states::AppState::Loaded))
-            .run_if(input_just_pressed(KeyCode::Space)));
-
-        app.add_systems(Update, system::reset
-            .run_if(in_state(states::AppState::Loaded))
-            .run_if(input_just_pressed(KeyCode::KeyM)))
+            .run_if(in_state(states::AppState::InGame))
+            .run_if(input_just_pressed(KeyCode::Space)))
             .observe(system::gameover)
             .observe(system::on_click_cell)
+            .observe(system::on_click_opened_cell)
             .observe(system::on_explode_cell);
+
+        app.add_systems(Update, system::reset
+            .run_if(input_just_pressed(KeyCode::KeyM)));
     }
 }

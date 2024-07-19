@@ -1,7 +1,7 @@
 use std::process::Child;
 
 use super::component::*;
-use super::states::FontAssets;
+use super::states::{AppState, FontAssets};
 use bevy::ecs::{entity, event, query};
 use bevy::input::mouse::MouseButtonInput;
 use bevy::prelude::*;
@@ -9,7 +9,15 @@ use bevy::window::PrimaryWindow;
 use rand::seq::SliceRandom;
 use super::style::*;
 
-pub fn setup(mut commands: Commands,font:Res<FontAssets>) {
+pub fn setup(
+    mut commands: Commands,
+    font:Res<FontAssets>,
+    mut visible: ResMut<VisibleState>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
+)
+{
+    visible.state = false;
     commands.spawn(Camera2dBundle::default());
     commands
         .spawn(create_screen_node())
@@ -32,6 +40,9 @@ pub fn setup(mut commands: Commands,font:Res<FontAssets>) {
             });
                
         });
+        if *state.get() == AppState::Loaded{
+            next_state.set(AppState::InGame);
+        }
 }
 fn create_screen_node() -> NodeBundle {
     NodeBundle {
@@ -156,17 +167,20 @@ pub fn click_cell(
                 if button.marked{
                     return;
                 }
-                if button.hasbomb{
-                    commands.trigger(Gameover);
-                    return;
-                }   
-                if !button.opened {
+                if !button.opened
+                {
                     button.opened = true;
                     commands.trigger(OnClickCell{
                         index:button.index,
+                        hasbomb:button.hasbomb,
+                        marked:button.marked,
                     });   
-                    return;  
+                    return;
                 }
+                commands.trigger(OnClickOpenedCell{
+                    index:button.index,
+                    bomb_count:button.bomb_count,
+                });  
             }
             Interaction::Hovered => {}
             Interaction::None => {}
@@ -174,9 +188,15 @@ pub fn click_cell(
     }
 }
 
-pub fn gameover(trigger: Trigger<Gameover>)
+pub fn gameover(_trigger: Trigger<Gameover>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
+)
 {
-    println!("{:?} event is triggered!",trigger.event());
+    if *state.get() == AppState::InGame {
+        next_state.set(AppState::Gameover);
+    }
+    println!("GameOver!!");
 }
 #[allow(clippy::type_complexity)]
 pub fn reset(mut commands: Commands,
@@ -184,8 +204,13 @@ pub fn reset(mut commands: Commands,
     font:Res<FontAssets>,
     parent: Query<Entity,With<Grid>>,
     mut visible: ResMut<VisibleState>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
 )
 {
+    if *state.get() == AppState::Gameover{
+        next_state.set(AppState::InGame);
+    }
     visible.state = false;
     
     for entity in cell_query.iter() {
@@ -217,6 +242,10 @@ pub fn on_click_cell(
     mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
     mut count :Local<u16>,
 ){
+    if trigger.event().hasbomb && !trigger.event().marked{
+        commands.trigger(Gameover);
+        return;
+    }
     *count = 0;
     let mut bomb_count =0;
     let neighbors = get_neighboring_indices(trigger.event().index);
@@ -232,8 +261,9 @@ pub fn on_click_cell(
             }
         }
         if bomb_count != 0{
-            for (button,children) in &mut neighbor_query{
-                if button.index == trigger.event().index{
+            for (mut button,children) in &mut neighbor_query{
+                if button.index == trigger.event().index && !button.marked{
+                    button.bomb_count = bomb_count;
                     for child in children.iter() {
                         if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
                             text.sections[0].value = bomb_count.to_string();
@@ -250,6 +280,7 @@ pub fn on_click_cell(
             *count+=1;
         }
     }
+    println!("{:?}",*count);
     if *count == GRID_SIZE - (BOMB_COUNT as u16)
     {
         println!("Clear");
@@ -266,29 +297,11 @@ pub fn on_explode_cell(
     trigger: Trigger<ExplodeCell>,
     mut commands: Commands,
     mut neighbor_query: Query<(Mut<CellButton>,&Children)>,
-    mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
 ) {
     let mut neighbors: Vec<u16> = get_neighboring_indices(trigger.event().index);
     while let Some(index) = neighbors.pop() {
-        let mut count = 0;
-        // 周囲の爆弾の数をカウント
-        for &neighbor_index in &neighbors {
-            if let Some(button) = neighbor_query.iter_mut().find_map(|(button,_)| {
-                if button.index == neighbor_index {
-                    Some(button)
-                } else {
-                    None
-                }
-            }) {
-                if button.hasbomb {
-                    count += 1;
-                }
-            }
-        }
-
-        // 現在のセルのテキストと可視性を更新
-        if let Some((mut button, children)) = neighbor_query.iter_mut().find_map(|(button, children)| {
-            if button.index == index && !button.opened && !button.hasbomb  {
+        if let Some((mut button, _)) = neighbor_query.iter_mut().find_map(|(button, children)| {
+            if button.index == index && !button.opened && !button.marked {
                 Some((button,children))
             } else {
                 None
@@ -297,26 +310,48 @@ pub fn on_explode_cell(
             button.opened = true;
             commands.trigger(OnClickCell{
                 index:button.index,
+                hasbomb:button.hasbomb,
+                marked:button.marked,
             });
-            // カウントが0以外の場合、テキストを更新
-            if count != 0 {
-                for child in children.iter() {
-                    if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
-                        text.sections[0].value = count.to_string();
-                        *vis = Visibility::Visible;
-                    }
-                }
-            }else {
-                //ボムカウントが0のindexをpush
-                if !neighbors.contains(&button.index) && count == 0 {
-                    neighbors.push(button.index);
-                }       
-            } 
+            if !neighbors.contains(&button.index) {
+                neighbors.push(button.index);
+            }       
         }
         
     }
 }
-
+pub fn on_click_opened_cell(
+    trigger: Trigger<OnClickOpenedCell>,
+    mut commands: Commands,
+    mut neighbor_query: Query<(Mut<CellButton>,&Children),>,
+)
+{
+    let mut marked_count = 0;
+    let neighbors = get_neighboring_indices(trigger.event().index);
+    for &neighbor_index in &neighbors {
+        for (button,_) in &mut neighbor_query{
+            if button.index == neighbor_index && button.marked {
+                marked_count += 1;
+            }
+        }
+    }
+    if trigger.event().bomb_count == marked_count{
+        for &neighbor_index in &neighbors {
+            for (mut button,_) in &mut neighbor_query{
+                if button.index == neighbor_index && !button.marked {
+                    button.opened = true;
+                    commands.trigger(OnClickCell{
+                        index: button.index,
+                        hasbomb:button.hasbomb,
+                        marked:button.marked,
+                    })
+                }
+            }
+        }
+    }
+    else{
+    }
+}
 
 fn get_neighboring_indices(index:u16) ->Vec<u16>
 {

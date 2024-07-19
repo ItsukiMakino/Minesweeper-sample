@@ -20,7 +20,16 @@ pub struct ClickCell;
 #[derive(Event,Debug)]
 pub struct OnClickCell{
     pub index:u16,
+    pub hasbomb:bool,
+    pub marked:bool,
 }
+
+#[derive(Event,Debug)]
+pub struct OnClickOpenedCell{
+    pub index:u16,
+    pub bomb_count:u8,
+}
+
 #[derive(Event,Debug)]
 pub struct ExplodeCell{
     pub index:u16,
