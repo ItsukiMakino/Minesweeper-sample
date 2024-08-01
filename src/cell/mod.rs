@@ -26,12 +26,14 @@ impl Plugin for MyPlugin {
         app.add_systems(Update, system::toggle_visible
             .run_if(in_state(states::AppState::InGame))
             .run_if(input_just_pressed(KeyCode::Space)))
-            .observe(system::gameover)
             .observe(system::on_click_cell)
+            .observe(system::on_cell_marked)
             .observe(system::on_click_opened_cell)
             .observe(system::on_explode_cell);
 
         app.add_systems(Update, system::reset
             .run_if(input_just_pressed(KeyCode::KeyM)));
+        app.add_systems(OnEnter(states::AppState::GameClear), system::gameclear);
+        app.add_systems(OnEnter(states::AppState::GameOver), system::gameover);
     }
 }

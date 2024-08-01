@@ -7,7 +7,7 @@ pub enum AppState{
     Loaded,
     InGame,
     GameClear,
-    Gameover,
+    GameOver,
 }
 #[derive(AssetCollection, Resource,Clone)]
 pub struct FontAssets {

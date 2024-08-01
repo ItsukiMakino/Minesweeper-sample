@@ -1,9 +1,10 @@
-use std::process::Child;
+use std::cell;
 
+use bevy::color::palettes::css::*;
+use bevy::color::{Color, Srgba};
 use super::component::*;
 use super::states::{AppState, FontAssets};
 use bevy::ecs::{entity, event, query};
-use bevy::input::mouse::MouseButtonInput;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use rand::seq::SliceRandom;
@@ -17,6 +18,7 @@ pub fn setup(
     mut next_state: ResMut<NextState<AppState>>,
 )
 {
+    println!("current state is Loaded");
     visible.state = false;
     commands.spawn(Camera2dBundle::default());
     commands
@@ -41,6 +43,7 @@ pub fn setup(
                
         });
         if *state.get() == AppState::Loaded{
+            println!("change state to InGame");
             next_state.set(AppState::InGame);
         }
 }
@@ -55,7 +58,7 @@ fn create_screen_node() -> NodeBundle {
             justify_content: JustifyContent::Center,
             ..Default::default()
         },
-        background_color: BackgroundColor(Color::srgb(255.0, 0.0, 0.0)),
+        background_color:BackgroundColor(Color::BLACK),
         ..Default::default()
     }
 }
@@ -74,7 +77,7 @@ fn create_node_parent() -> NodeBundle {
             // justify_content: JustifyContent::FlexStart,
             ..Default::default()
         },
-        background_color: Color::srgb(0.2, 0.4, 1.).into(),
+        background_color: BackgroundColor(Color::BLACK),
         ..Default::default()
     }
 }
@@ -87,7 +90,7 @@ fn create_button() -> ButtonBundle {
             align_items:AlignItems::Center,
             ..Default::default()
         },
-        background_color: BackgroundColor(Color::WHITE),
+        background_color: CELL_COLOR,
         ..Default::default()
     }
 }
@@ -123,6 +126,8 @@ pub fn mark_cell(
     q_windows: Query<&Window, With<PrimaryWindow>>,
     mut query: Query<(&Node, &GlobalTransform, Mut<CellButton>, &Children)>,
     mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
+    mut commands: Commands,
+    font:Res<FontAssets>, 
 )
 {
     if let Some(position) = q_windows.single().cursor_position() {
@@ -134,10 +139,17 @@ pub fn mark_cell(
             
             if (min.x..max.x).contains(&position.x) && (min.y..max.y).contains(&position.y) && !cell_button.opened {
                 cell_button.marked = !cell_button.marked;
+               
+                commands.trigger(OnCellMarked{index:cell_button.index});
                 if cell_button.marked {
                     for child in children{
                         if let Ok((mut text, mut visibility)) = text_query.get_mut(*child){
                             text.sections[0].value = "M".to_string();
+                            text.sections[0].style = TextStyle{
+                                color:Color::BLACK,
+                                font:font.font.clone(),
+                                    ..default()
+                            };
                             *visibility = Visibility::Visible;
                         }
                     }
@@ -153,12 +165,30 @@ pub fn mark_cell(
         }
     } 
 }
+pub fn on_cell_marked(
+    trigger: Trigger<OnCellMarked>,
+    mut query: Query<(Mut<CellButton>, &Children)>,
+){
+    let mut bomb_count = 0;
+    let neighbor = get_neighboring_indices(trigger.event().index);
+    for &neighbor_index in &neighbor{
+        for (button, _children) in &mut query{
+            if button.index == neighbor_index && button.hasbomb{
+                bomb_count +=1;
+            }
+        }
+    }
+    for (mut button, _children) in &mut query{
+        if button.index == trigger.event().index && bomb_count !=0 {
+            button.bomb_count = bomb_count;
+        }
+    }
+}
 #[allow(clippy::type_complexity)]
 pub fn click_cell(
     mut query: Query<
         (&Interaction,Mut<CellButton>,),
-        (Changed<Interaction>, With<CellButton>,),
-    >,
+        (Changed<Interaction>, With<CellButton>,),>,
     mut commands: Commands,
 ) {
     for (interaction,mut button,) in &mut query {
@@ -188,15 +218,72 @@ pub fn click_cell(
     }
 }
 
-pub fn gameover(_trigger: Trigger<Gameover>,
-    state: Res<State<AppState>>,
-    mut next_state: ResMut<NextState<AppState>>,
+pub fn gameover(
+    mut query: Query<(Mut<CellButton>,Mut<BackgroundColor>,&Children),>,
+    mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
+    font:Res<FontAssets>, 
 )
 {
-    if *state.get() == AppState::InGame {
-        next_state.set(AppState::Gameover);
+    for (button, mut bg,children ) in &mut query{
+        if button.hasbomb && !button.opened{
+            for child in children.iter(){
+                if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
+                    *vis = Visibility::Visible;
+                    *bg = OPENED_COLOR;
+                    text.sections[0].value = "M".to_string();
+                    text.sections[0].style = TextStyle{
+                        color:Color::BLACK,
+                        font:font.font.clone(),
+                            ..default()
+                    };
+                }
+
+            }
+        }
+        if !button.hasbomb && button.marked {
+            for child in children.iter(){
+                if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
+                    *vis = Visibility::Visible;
+                    *bg = UNMARKED_BOMB_COLOR;
+                    text.sections[0].value = if button.bomb_count != 0 {
+                        button.bomb_count.to_string()
+                    }else{
+                        "".to_string()
+                    };
+                    text.sections[0].style = TextStyle{
+                        color:Color::BLACK,
+                        font:font.font.clone(),
+                            ..default()
+                    };
+                }
+
+            }
+        }
     }
-    println!("GameOver!!");
+}
+pub fn gameclear(
+    mut query: Query<(Mut<CellButton>,Mut<BackgroundColor>,&Children),>,
+    mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
+    font:Res<FontAssets>, 
+){
+    for (button, _bg,children ) in &mut query{
+        if button.hasbomb {
+            for child in children.iter(){
+                if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
+                    *vis = Visibility::Visible;
+                    text.sections[0].value = "M".to_string();
+                    text.sections[0].style = TextStyle{
+                        color:Color::BLACK,
+                        font:font.font.clone(),
+                            ..default()
+                    };
+                   
+                }
+
+            }
+        }
+    }
+   println!("Clear")
 }
 #[allow(clippy::type_complexity)]
 pub fn reset(mut commands: Commands,
@@ -208,8 +295,10 @@ pub fn reset(mut commands: Commands,
     mut next_state: ResMut<NextState<AppState>>,
 )
 {
-    if *state.get() == AppState::Gameover{
-        next_state.set(AppState::InGame);
+    match *state.get() {
+        AppState::GameOver => next_state.set(AppState::InGame),
+        AppState::GameClear => next_state.set(AppState::InGame),
+        _ =>{}
     }
     visible.state = false;
     
@@ -238,21 +327,43 @@ pub fn reset(mut commands: Commands,
 pub fn on_click_cell(
     trigger: Trigger<OnClickCell>,
     mut commands: Commands,
-    mut neighbor_query: Query<(Mut<CellButton>,&Children),>,
+    mut neighbor_query: Query<(Mut<CellButton>,Mut<BackgroundColor>,&Children),>,
     mut text_query: Query<(Mut<Text>, Mut<Visibility>)>,
-    mut count :Local<u16>,
+    state: Res<State<AppState>>,
+    mut next_state: ResMut<NextState<AppState>>,
+    font:Res<FontAssets>,   
 ){
     if trigger.event().hasbomb && !trigger.event().marked{
-        commands.trigger(Gameover);
+        if *state.get() == AppState::InGame {
+            for (button,mut bg,children) in &mut neighbor_query{
+                if button.index == trigger.event().index {
+                    for child in children.iter(){
+                        if let Ok((mut text, mut vis)) = text_query.get_mut(*child)
+                        {
+                            *bg = EXPLOEDE_BOMB_COLOR;
+                            *vis = Visibility::Visible;
+                            text.sections[0].value = "M".to_string();
+                            text.sections[0].style = TextStyle{
+                                color:Color::BLACK,
+                                font:font.font.clone(),
+                                    ..default()
+                            };
+                        }
+                    }
+                }
+               
+            }
+            next_state.set(AppState::GameOver);
+        }
         return;
     }
-    *count = 0;
+    let mut count = 0;
     let mut bomb_count =0;
     let neighbors = get_neighboring_indices(trigger.event().index);
       
     
     for &neighbor_index in &neighbors {
-        for (button,_) in &mut neighbor_query{
+        for (button,_,_) in &mut neighbor_query{
             if button.index == neighbor_index{
                 if button.hasbomb
                 {
@@ -261,12 +372,18 @@ pub fn on_click_cell(
             }
         }
         if bomb_count != 0{
-            for (mut button,children) in &mut neighbor_query{
+            for (mut button,mut bg,children) in &mut neighbor_query{
                 if button.index == trigger.event().index && !button.marked{
                     button.bomb_count = bomb_count;
                     for child in children.iter() {
                         if let Ok((mut text, mut vis)) = text_query.get_mut(*child) {
                             text.sections[0].value = bomb_count.to_string();
+                            text.sections[0].style = TextStyle{
+                                color:get_textcolor(bomb_count),
+                                font:font.font.clone(),
+                                    ..default()
+                            };
+                            *bg = OPENED_COLOR;
                             *vis = Visibility::Visible;
                         }
                     }
@@ -275,18 +392,29 @@ pub fn on_click_cell(
             }
         }
     }
-    for (button,_) in &mut neighbor_query{
+    for (button,_,_) in &mut neighbor_query{
         if button.opened{
-            *count+=1;
+            count+=1;
         }
     }
-    println!("{:?}",*count);
-    if *count == GRID_SIZE - (BOMB_COUNT as u16)
+    if count == GRID_SIZE - (BOMB_COUNT as u16)
     {
-        println!("Clear");
+        match *state.get(){
+            AppState::InGame => {
+                next_state.set(AppState::GameClear);
+            },
+            _ =>{}
+        }
         return;
     }
     if bomb_count == 0{
+        for (mut button,mut bg,_) in &mut neighbor_query{
+            if button.index == trigger.event().index && !button.marked{
+                button.bomb_count = bomb_count;
+                *bg = OPENED_COLOR;
+            }
+           
+        }
         commands.trigger(ExplodeCell{
             index:trigger.event().index,
         });
@@ -296,18 +424,20 @@ pub fn on_click_cell(
 pub fn on_explode_cell(
     trigger: Trigger<ExplodeCell>,
     mut commands: Commands,
-    mut neighbor_query: Query<(Mut<CellButton>,&Children)>,
+    mut neighbor_query: Query<(Mut<CellButton>,Mut<BackgroundColor>,&Children)>,
 ) {
+    
     let mut neighbors: Vec<u16> = get_neighboring_indices(trigger.event().index);
     while let Some(index) = neighbors.pop() {
-        if let Some((mut button, _)) = neighbor_query.iter_mut().find_map(|(button, children)| {
+        if let Some((mut button,mut bg, _)) = neighbor_query.iter_mut().find_map(|(button,bg, children)| {
             if button.index == index && !button.opened && !button.marked {
-                Some((button,children))
+                Some((button,bg,children))
             } else {
                 None
             }
         }) {
             button.opened = true;
+            *bg = OPENED_COLOR;
             commands.trigger(OnClickCell{
                 index:button.index,
                 hasbomb:button.hasbomb,
@@ -377,6 +507,20 @@ fn get_neighboring_indices(index:u16) ->Vec<u16>
     }
     neighbors
 }
+fn get_textcolor(bombcount:u8)-> Color
+{
+    match bombcount {
+        1 =>Color::Srgba(BLACK),
+        2 =>Color::Srgba(MEDIUM_SEA_GREEN),
+        3 =>Color::Srgba(ORANGE_RED),
+        4 =>Color::Srgba(PURPLE),
+        5 =>Color::Srgba(ORANGE),
+        6 =>Color::Srgba(MEDIUM_SEA_GREEN),
+        7 =>Color::Srgba(MEDIUM_VIOLET_RED),
+        8 =>Color::Srgba(GREY),
+        _ =>Color::BLACK,
+    }
+}
 pub fn toggle_visible(
     mut query: Query<
             (Mut<CellButton>,Mut<BackgroundColor>),
@@ -386,13 +530,13 @@ pub fn toggle_visible(
 {
     for (button, mut color) in query.iter_mut() {
         if !visible.state {
-            *color = if button.hasbomb {
-                Color::srgb(0.2, 0.2, 0.4).into()
-            } else {
-                Color::srgb(1.0, 1.0, 1.0).into()
-            };
+           if button.hasbomb && !button.opened{
+               *color =  Color::srgb(0.2, 0.2, 0.4).into()
+           }
         } else {
-            *color = Color::srgb(1.0, 1.0, 1.0).into();
+            if !button.opened{
+                *color =  Color::WHITE.into()
+            }
         }
     }
     visible.state = !visible.state;
