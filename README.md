@@ -1,1 +1,1 @@
-### mineswepper is a typo
+#Minesweeper-sample
